@@ -119,9 +119,6 @@ namespace raisim {
 
             hand_prev_gc_= hand_gc_init_.tail(actionDim_);
 
-//            RSINFO(hand_->getGeneralizedCoordinate());
-//            gc_init_ << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1 ,0.1 ,0.1, 0.1, 0.1, 0.1, 0.1, 0.1;
-
             ///Ball
             ball_ = world_->addSphere(0.03, 0.03);
             ball_gc_init = {0,-0.07,0.5};
@@ -131,7 +128,7 @@ namespace raisim {
             world_->setERP(0, 0);
 
             /// MUST BE DONE FOR ALL ENVIRONMENTS
-            obDim_ = 1;
+            obDim_ = 7;//ball(x,y,z), handx - ball_x,hand_y-ball_y, hand_z-ball_z), dist, d(dist)
             actionDim_ = 20;
             actionMean_.setZero(actionDim_);
             actionStd_.setZero(actionDim_);
@@ -143,11 +140,18 @@ namespace raisim {
             actionStd_.setConstant(0.1);
 
             obMean_.setZero();
-            obStd_ << ball_gc_init[2];
+            obStd_ << 1,1,ball_gc_init[2], 1,1,1, ball_gc_init[2];
 
             //Reward coefficients
             forceRewardCoeff_ = cfg["forceRewardCoeff"].as<double>();
             actionScaler_ = cfg["actionScaler"].as<double>();
+            minBallHeight_ = cfg["minBallHeight"].as<double>();
+
+            struct Vec3 { double x, y, z;};
+            speedRandomMin_={cfg["speedRandom"][0].as<double>(),cfg["speedRandom"][2].as<double>(),cfg["speedRandom"][4].as<double>()};
+            speedRandomMax_={cfg["speedRandom"][1].as<double>(),cfg["speedRandom"][3].as<double>(),cfg["speedRandom"][5].as<double>()};
+
+            coordRandom_={cfg["coordRandom"][0].as<double>(),cfg["coordRandom"][1].as<double>(),cfg["coordRandom"][2].as<double>()};
 
             gui::rewardLogger.init({"reward", "forceReward"});
             reward_ = 0;
@@ -182,10 +186,13 @@ namespace raisim {
             }
         }
 
-        double fRand(double fMin, double fMax)
-        {
+        double fRand(double fMin, double fMax){
             double f = (double)rand() / RAND_MAX;
             return fMin + f * (fMax - fMin);
+        }
+
+        raisim::Vec<3> vec3Rand(raisim::Vec<3> min, raisim::Vec<3> max){
+            return raisim::Vec<3>{fRand(min[0],max[0]),fRand(min[1],max[1]),fRand(min[2],max[2])};
         }
 
         ~ENVIRONMENT() final = default;
@@ -194,11 +201,10 @@ namespace raisim {
 
         void reset() final {
 
-            auto ball_h = ball_gc_init;
+            auto ball_coord = ball_gc_init;
+            ball_coord += vec3Rand(raisim::Vec<3>{0,0,0},coordRandom_);
 
-            ball_h[2] += fRand(-0.1, 3);
-
-            ball_->setPosition(ball_h);
+            ball_->setPosition(ball_coord);
             ball_->setVelocity(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
 
             hand_prev_gc_= hand_gc_init_.tail(actionDim_);
@@ -211,24 +217,45 @@ namespace raisim {
 
         }
 
+        float getDistanceToBall(){
+            int hand_joint = 6;
+            raisim::Vec<3>  hand_pos{}, finger_pos{}, ball_pos{};
+            ball_->getPosition(0, ball_pos);
+            hand_->getPosition(hand_joint, hand_pos);
+            hand_pos[0]=0;
+            hand_pos[1]=0;
+//            RSINFO(hand_pos);
+
+//            hand_->getPosition(hand_joint, finger_pos);
+//            RSINFO(finger_pos);
+//
+//            ///pose near mid of palm
+//            hand_pos[2] = hand_pos[2]+(hand_pos[2]-finger_pos[2])/2;
+//            RSINFO(hand_pos);
+//            RSINFO("");
+
+            ball_pos-=hand_pos;
+            return ball_pos.squaredNorm();
+        }
+
         float step(const Eigen::Ref <EigenVec> &action) final {
 //            RSINFO("step");
 
             /// action scaling
             actionScaled_ =  hand_prev_gc_+action.cast<double>()*actionScaler_;
+//            RSINFO(actionScaled_);
             Eigen::VectorXd jointVelocityTarget(handGvDim_);
             jointVelocityTarget.setZero();
             hand_->setPdTarget(actionScaled_, jointVelocityTarget);
             hand_prev_gc_ = actionScaled_;
 
             /// add random ball velocity
-            raisim::Vec<3>  hand_pos{}, ball_pos{}, ball_speed{}, rand_component{};
-            ball_->getPosition(0, ball_pos);
-            hand_->getPosition(7, hand_pos);
+            raisim::Vec<3> ball_speed{}, rand_component{};
             ball_->getVelocity(0, ball_speed);
+            float distToBall = getDistanceToBall();
 
-            if (ball_pos[2]<0.4){
-                rand_component = {fRand(-0.2,0.2),fRand(-0.2,0.2),fRand(-0.2,0.2)};
+            if (distToBall < 0.1){
+                rand_component = {vec3Rand(speedRandomMin_,speedRandomMax_)};
                 ball_speed += rand_component;
                 ball_->setVelocity(ball_speed, {0,0,0});
             }
@@ -248,8 +275,8 @@ namespace raisim {
             updateObservation();
 
             /// check distance from some point on hand and calc rawrd
-            ball_pos-=hand_pos;
-            reward_ = forceRewardCoeff_ * 1/ball_pos.squaredNorm();
+
+            reward_ = forceRewardCoeff_ * 1/distToBall;
 
             if (visualizeThisStep_) {
                 gui::rewardLogger.log("forceReward", forceReward_);
@@ -269,37 +296,31 @@ namespace raisim {
         }
 
         void updateObservation() {
-//            RSINFO("uo");
-
+            raisim::Vec<3> ball_pos{}, hand_pos{}, dpos{}, vel{};
+            ball_->getPosition(0, ball_pos);
+            hand_->getPosition(6, hand_pos);
+            dpos = hand_pos;
+            dpos -= ball_pos;
             obDouble_.setZero(obDim_);
             obScaled_.setZero(obDim_);
-            obDouble_ << ball_->getPosition()[2];
-            obScaled_ = (obDouble_ - obMean_).cwiseQuotient(obStd_);
-//            RSINFO("euo");
+            obDouble_ << ball_pos[0],ball_pos[1],ball_pos[2], dpos[0], dpos[1], dpos[2], getDistanceToBall();
+            obScaled_ = obDouble_;//(obDouble_ - obMean_).cwiseQuotient(obStd_);
 
         }
 
         void observe(Eigen::Ref <EigenVec> ob) final {
-            /// convert it to float
-//            RSINFO("ob");
             ob = obScaled_.cast<float>();
-//            RSINFO("after ob");
-
         }
 
         bool isTerminalState(float &terminalReward) final {
 //            RSINFO("ist");
 
             terminalReward = float(terminalRewardCoeff_);
-            //If the angle of pole is greater than +-50 degs or the cart position is greater than +-2m,
-            //treat them as terminal conditions
-            if (ball_->getPosition()[2] < 0.15) {
+            if (ball_->getPosition()[2] < minBallHeight_) {
 //                RSINFO(ball_->getPosition()[2]);
-
                 return true;
             }
             terminalReward = 0.f;
-//            RSINFO("not t");
 
             return false;
         }
@@ -330,6 +351,8 @@ namespace raisim {
         raisim::Sphere *ball_;
         std::vector <GraphicObject> *ballVisual_;
         raisim::Vec<3> ball_gc_pos,ball_gc_init;
+        raisim::Vec<3> speedRandomMin_,speedRandomMax_, coordRandom_;
+        float minBallHeight_=0;
         //Hand
         raisim::ArticulatedSystem *hand_;
         std::vector <GraphicObject> *handVisual_;

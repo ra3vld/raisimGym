@@ -3,11 +3,11 @@ record_video: yes
 
 environment:
   render: yes
-  num_envs: 100
+  num_envs: 50
   num_threads: 1
   simulation_dt: 0.0025
   control_dt: 0.01
-  max_time: 4.0
+  max_time: 2.0
   learning_rate: 1e-3
   nminibatches: 10
   noptepochs: 10
@@ -15,4 +15,17 @@ environment:
   eval_every_n: 2
 
   actionScaler: 0.9
+  speedRandom:
+    - -0.1
+    - 0.1
+    - -0.1
+    - 0.1
+    - -0.1
+    - 0.1
+  coordRandom:
+    - 0.01
+    - 0.01
+    - 0.2
+  minBallHeight: 0.22
+
   forceRewardCoeff: 5e-3
