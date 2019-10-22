@@ -23,7 +23,7 @@ class RaisimGymVecEnv(VecEnv):
     def seed(self, seed=None):
         self.wrapper.seed(seed)
 
-    def step(self, action, visualize=False):
+    def step(self, action, visualize=True):
         if not visualize:
             self.wrapper.step(action, self._observation, self._reward, self._done, self._extraInfo)
         else:

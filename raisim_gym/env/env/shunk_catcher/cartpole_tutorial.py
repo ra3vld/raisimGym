@@ -1,6 +1,6 @@
 from ruamel.yaml import YAML, dump, RoundTripDumper
 from raisim_gym.env.RaisimGymVecEnv import RaisimGymVecEnv as Environment
-from raisim_gym.env.env.hummingbird import __HUMMINGBIRD_RESOURCE_DIRECTORY__ as __RSCDIR__
+from cartpole import __CARTPOLE_RESOURCE_DIRECTORY__ as __RSCDIR__
 from raisim_gym.algo.ppo2 import PPO2
 from raisim_gym.archi.policies import MlpPolicy
 from raisim_gym.helper.raisim_gym_helper import ConfigurationSaver, TensorboardLauncher
@@ -21,10 +21,10 @@ cfg_abs_path = parser.parse_args().cfg
 cfg = YAML().load(open(cfg_abs_path, 'r'))
 
 # save the configuration and other files
-rsg_root = os.path.dirname(os.path.abspath(__file__)) + '/../'
-log_dir = rsg_root + '/QuadrotorTrainingdata'
-saver = ConfigurationSaver(log_dir=log_dir+'/quadrotor_position_tracking',
-                           save_items=[rsg_root+'raisim_gym/env/env/hummingbird/Environment.hpp', cfg_abs_path])
+rsg_root = os.path.dirname(os.path.abspath(__file__)) + '/../cartpole'
+log_dir = rsg_root + '/data'
+saver = ConfigurationSaver(log_dir=log_dir + '/Cartpole_tutorial',
+                           save_items=[rsg_root + '/Environment.hpp', cfg_abs_path])
 
 # create environment from the configuration file
 if args.mode == "test": # for test mode, force # of env to 1
@@ -33,49 +33,39 @@ env = Environment(RaisimGymEnv(__RSCDIR__, dump(cfg['environment'], Dumper=Round
 
 
 if mode == 'train':
-
-# Get algorithm
+    # tensorboard, this will open your default browser.
+    TensorboardLauncher(saver.data_dir + '/PPO2_1')
+    # Get algorithm
     model = PPO2(
         tensorboard_log=saver.data_dir,
         policy=MlpPolicy,
-        policy_kwargs=dict(net_arch=[dict(pi=[96, 64], vf=[96, 64])]),
+        policy_kwargs=dict(net_arch=[dict(pi=[128, 128], vf=[128, 128])]),
         env=env,
         gamma=0.998,
         n_steps=math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt']),
         ent_coef=0,
-        learning_rate=1e-3,
+        learning_rate=cfg['environment']['learning_rate'],
         vf_coef=0.5,
         max_grad_norm=0.5,
         lam=0.95,
-        nminibatches=1,
-        noptepochs=10,
+        nminibatches=cfg['environment']['nminibatches'],
+        noptepochs=cfg['environment']['noptepochs'],
         cliprange=0.2,
         verbose=1,
     )
-
-    # tensorboard
-    # Make sure that your chrome browser is already on.
-    # TensorboardLauncher(saver.data_dir + '/PPO2_1')
-
     # PPO run
-    # Originally the total timestep is 500000000
-    # 10 zeros for nupdates to be 4000
-    # 1000000000 is 2000 iterations and so 
-    # 2000000000 is 4000 iterations. 
     model.learn(
-        total_timesteps=10000000000,  
-        eval_every_n=10,
-        log_dir=saver.data_dir, 
+        total_timesteps=cfg['environment']['total_timesteps'],
+        eval_every_n=cfg['environment']['eval_every_n'],
+        log_dir=saver.data_dir,
         record_video=cfg['record_video']
     )
     model.save(saver.data_dir)
-        # Need this line if you want to keep tensorflow alive after training
+    # Need this line if you want to keep tensorflow alive after training
     input("Press Enter to exit... Tensorboard will be closed after exit\n")
-
 # Testing mode with a trained weight
 else:
     weight_path = args.weight
-    weight_path='/home/ra3vld/microsoft/ws/raisimGym/QuadrotorTrainingdata/quadrotor_position_tracking/2019-10-16-21-55-03_Iteration_430.pkl'
     if weight_path == "":
         print("Can't find trained weight, please provide a trained weight with --weight switch\n")
     else:
@@ -85,14 +75,13 @@ else:
     running_reward = 0.0
     ep_len = 0
     for _ in range(100000):
-        env.wrapper.showWindow()
         action, _ = model.predict(obs)
         obs, reward, done, infos = env.step(action, visualize=True)
         running_reward += reward[0]
         ep_len += 1
-        # if done:
-        #     print("Episode Reward: {:.2f}".format(running_reward))
-        #     print("Episode Length", ep_len)
-        #     running_reward = 0.0
-        #     ep_len = 0
-ё
+        if done:
+            print("Episode Reward: {:.2f}".format(running_reward))
+            print("Episode Length", ep_len)
+            running_reward = 0.0
+            ep_len = 0
+
