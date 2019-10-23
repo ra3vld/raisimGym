@@ -46,7 +46,6 @@ def get_last_weight():
 weight_path=""
 if CONTINUE_TRAIN:
     weight_path = get_last_weight()
-# weight_path = '/home/ra3vld/microsoft/ws/raisimGym/cartpole/data/Cartpole_tutorial/2019-10-22-08-54-19_Iteration_60.pkl'
 if mode == 'train':
     # tensorboard, this will open your default browser.
     TensorboardLauncher(saver.data_dir + '/PPO2_1')

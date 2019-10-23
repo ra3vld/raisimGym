@@ -23,15 +23,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-/* Convention
-*   action space = force (continuous)                        n = 1, index =0
-*
-*   observation space = [ x (cart position)                  n =  1, index=0
-                          theta (tilted angle),              n =  1, index=1
-                          x_dot (cart linear velocity),      n =  1, index=2
-*                         theta_dot (tilted angle velocity,  n =  1, index=3] total 4
-*/
-
 
 #include <stdlib.h>
 #include <cstdint>
@@ -178,7 +169,6 @@ namespace raisim {
 
                 /// starts visualizer thread
                 vis->initApp();
-//                cartpoleVisual_ = vis->createGraphicalObject(cartpole_, "Cartpole");
                 ballVisual_ = vis->createGraphicalObject(ball_, "ball", "default");
                 handVisual_ = vis->createGraphicalObject(hand_, "hand");
 
@@ -186,7 +176,6 @@ namespace raisim {
                 vis->createGraphicalObject(ground, 20, "floor", "checkerboard_green");
                 desired_fps_ = 50.;
                 vis->setDesiredFPS(desired_fps_);
-//                vis->select(cartpoleVisual_->at(0), false);
                 vis->select(handVisual_->at(0), false);
 
                 vis->getCameraMan()->setYawPitchDist(Ogre::Radian(-1.0), Ogre::Radian(-1.0), 1);
@@ -355,8 +344,6 @@ namespace raisim {
 
         std::normal_distribution<double> distribution_;
 
-//        raisim::ArticulatedSystem *cartpole_;
-//        std::vector <GraphicObject> *cartpoleVisual_;
         Eigen::Vector3d initPosition{0,0,0.3};
         // Ball
         raisim::Sphere *ball_;
