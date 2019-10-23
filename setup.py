@@ -66,7 +66,8 @@ class CMakeBuild(build_ext):
 
         cmake_args.append('-DRSG_ENVIRONMENT_INCLUDE_PATH=' + __ENVIRONMENT_PATH__)
 
-        cfg = 'Debug' if self.debug else 'Release'
+        cfg = 'Debug' #if self.debug else 'Release'
+        print(cfg)
         build_args = ['--config', cfg]
         if platform.system() == "Windows":
             cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), extdir)]

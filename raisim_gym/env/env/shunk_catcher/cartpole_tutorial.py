@@ -1,6 +1,6 @@
 from ruamel.yaml import YAML, dump, RoundTripDumper
 from raisim_gym.env.RaisimGymVecEnv import RaisimGymVecEnv as Environment
-from cartpole import __CARTPOLE_RESOURCE_DIRECTORY__ as __RSCDIR__
+from raisim_gym.env.env.shunk_catcher import __SHUNK_RESOURCE_DIRECTORY__ as __RSCDIR__
 from raisim_gym.algo.ppo2 import PPO2
 from raisim_gym.archi.policies import MlpPolicy
 from raisim_gym.helper.raisim_gym_helper import ConfigurationSaver, TensorboardLauncher
@@ -31,10 +31,12 @@ if args.mode == "test": # for test mode, force # of env to 1
     cfg['environment']['num_envs'] = 1
 env = Environment(RaisimGymEnv(__RSCDIR__, dump(cfg['environment'], Dumper=RoundTripDumper)))
 
-
+weight_path=""
+# weight_path = '/home/ra3vld/microsoft/ws/raisimGym/cartpole/data/Cartpole_tutorial/2019-10-22-08-54-19_Iteration_60.pkl'
 if mode == 'train':
     # tensorboard, this will open your default browser.
-    TensorboardLauncher(saver.data_dir + '/PPO2_1')
+    # TensorboardLauncher(saver.data_dir + '/PPO2_1')
+    # weight_path = args.weight
     # Get algorithm
     model = PPO2(
         tensorboard_log=saver.data_dir,
@@ -53,6 +55,23 @@ if mode == 'train':
         cliprange=0.2,
         verbose=1,
     )
+    if weight_path != "":
+        model = PPO2.load(weight_path, env=env, tensorboard_log=saver.data_dir,
+                                                                                                                                                            policy=MlpPolicy,
+                                                                                                                                                            policy_kwargs=dict(net_arch=[dict(pi=[128, 128], vf=[128, 128])]),
+
+                                                                                                                                                            gamma=0.998,
+                                                                                                                                                            n_steps=math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt']),
+                                                                                                                                                            ent_coef=0,
+                                                                                                                                                            learning_rate=cfg['environment']['learning_rate'],
+                                                                                                                                                            vf_coef=0.5,
+                                                                                                                                                            max_grad_norm=0.5,
+                                                                                                                                                            lam=0.95,
+                                                                                                                                                            nminibatches=cfg['environment']['nminibatches'],
+                                                                                                                                                            noptepochs=cfg['environment']['noptepochs'],
+                                                                                                                                                            cliprange=0.2,
+                                                                                                                                                            verbose=1
+        )
     # PPO run
     model.learn(
         total_timesteps=cfg['environment']['total_timesteps'],
