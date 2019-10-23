@@ -38,6 +38,7 @@ def get_last_weight():
     entrys = reversed(sorted(entrys, key=lambda e: e.stat().st_mtime))
     for file in entrys:
         if os.path.isfile(file.path) and file.path[-4:]=='.pkl':
+            print(f"using {file.path} for continue learn")
             return file.path
 
     return ''

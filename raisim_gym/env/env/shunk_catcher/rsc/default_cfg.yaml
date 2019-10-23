@@ -3,7 +3,7 @@ record_video: yes
 
 environment:
   render: yes
-  num_envs: 100
+  num_envs: 20
   num_threads: 1
   simulation_dt: 0.0025
   control_dt: 0.01
@@ -12,20 +12,21 @@ environment:
   nminibatches: 10
   noptepochs: 10
   total_timesteps: 100000000
-  eval_every_n: 20
+  eval_every_n: 3
 
+  targetJointOnHand: 15
   actionScaler: 0.9
   lowBallSpeedRand:
     - -0.01
-    - 0.01
+    - -0.01
     - -0.01
     - 0.01
-    - -0.01
+    - 0.01
     - 0.01
   ballSpawnCoordRand:
     - 0.00
     - 0.0
-    - 2
+    - 0.01
   minBallHeight: 0.22
 
   randParallelShift:
