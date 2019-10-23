@@ -9,6 +9,7 @@ import os
 import math
 import argparse
 
+CONTINUE_TRAIN = True
 # configuration
 parser = argparse.ArgumentParser()
 parser.add_argument('--cfg', type=str, default=os.path.abspath(__RSCDIR__ + "/default_cfg.yaml"),
@@ -21,21 +22,34 @@ cfg_abs_path = parser.parse_args().cfg
 cfg = YAML().load(open(cfg_abs_path, 'r'))
 
 # save the configuration and other files
-rsg_root = os.path.dirname(os.path.abspath(__file__)) + '/../cartpole'
+rsg_root = os.path.dirname(os.path.abspath(__file__))
 log_dir = rsg_root + '/data'
-saver = ConfigurationSaver(log_dir=log_dir + '/Cartpole_tutorial',
+saver = ConfigurationSaver(log_dir=log_dir,
                            save_items=[rsg_root + '/Environment.hpp', cfg_abs_path])
-
+# получить список файлов, отсортировать его по дате, взять путь до последнего)
 # create environment from the configuration file
 if args.mode == "test": # for test mode, force # of env to 1
     cfg['environment']['num_envs'] = 1
 env = Environment(RaisimGymEnv(__RSCDIR__, dump(cfg['environment'], Dumper=RoundTripDumper)))
 
+
+def get_last_weight():
+    entrys = os.scandir(log_dir)
+    entrys = reversed(sorted(entrys, key=lambda e: e.stat().st_mtime))
+    for file in entrys:
+        if os.path.isfile(file.path) and file.path[-4:]=='.pkl':
+            return file.path
+
+    return ''
+
+
 weight_path=""
+if CONTINUE_TRAIN:
+    weight_path = get_last_weight()
 # weight_path = '/home/ra3vld/microsoft/ws/raisimGym/cartpole/data/Cartpole_tutorial/2019-10-22-08-54-19_Iteration_60.pkl'
 if mode == 'train':
     # tensorboard, this will open your default browser.
-    # TensorboardLauncher(saver.data_dir + '/PPO2_1')
+    TensorboardLauncher(saver.data_dir + '/PPO2_1')
     # weight_path = args.weight
     # Get algorithm
     model = PPO2(

@@ -81,7 +81,7 @@ namespace raisim {
 
             Eigen::VectorXd start_pose(runt_dof + 1);
             start_pose.tail(runt_dof + 1).setConstant(0.1);
-            hand->setBasePos_e(Eigen::Vector3d(0, 0, 0.3));
+            hand->setBasePos_e(initPosition);
 
             Eigen::Matrix3d rotation;
 //            rotation << 0,0,1, 0,1,0, -1,0,0;
@@ -114,14 +114,16 @@ namespace raisim {
 //            RSINFO(gcDim_);
             handGvDim_ = hand_->getDOF();
             nJointsHand_ = 9;
-            hand_gc_.setZero(handGcDim_); hand_gc_init_.setZero(handGcDim_);
+            hand_gc_.setZero(handGcDim_); hand_gc_init_.setZero(handGcDim_); hand_gc_init_.tail(handGcDim_).setConstant(0.1);
             hand_gv_.setZero(handGvDim_); hand_gv_init_.setZero(handGvDim_);
 
-            hand_prev_gc_= hand_gc_init_.tail(actionDim_);
+            hand_prev_gc_= hand_gc_init_.tail(handGcDim_);
 
             ///Ball
             ball_ = world_->addSphere(0.03, 0.03);
-            ball_gc_init = {0,-0.07,0.5};
+            ball_gc_init = raisim::Vec<3>{0,-0.07,0.2};
+            ball_gc_init[0] += initPosition[0];            ball_gc_init[1] += initPosition[1];            ball_gc_init[2] += initPosition[2];
+
             ball_->setPosition(ball_gc_init);
             ball_->setVelocity(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
             auto ground = world_->addGround();
@@ -129,7 +131,7 @@ namespace raisim {
 
             /// MUST BE DONE FOR ALL ENVIRONMENTS
             obDim_ = 7;//ball(x,y,z), handx - ball_x,hand_y-ball_y, hand_z-ball_z), dist, d(dist)
-            actionDim_ = 20;
+            actionDim_ = handGcDim_;
             actionMean_.setZero(actionDim_);
             actionStd_.setZero(actionDim_);
             obMean_.setZero(obDim_);
@@ -147,11 +149,16 @@ namespace raisim {
             actionScaler_ = cfg["actionScaler"].as<double>();
             minBallHeight_ = cfg["minBallHeight"].as<double>();
 
-            struct Vec3 { double x, y, z;};
-            speedRandomMin_={cfg["speedRandom"][0].as<double>(),cfg["speedRandom"][2].as<double>(),cfg["speedRandom"][4].as<double>()};
-            speedRandomMax_={cfg["speedRandom"][1].as<double>(),cfg["speedRandom"][3].as<double>(),cfg["speedRandom"][5].as<double>()};
+            auto speedRand = cfg["lowBallSpeedRand"];
+            speedRandomMin_={speedRand[0].as<double>(),speedRand[2].as<double>(),speedRand[4].as<double>()};
+            speedRandomMax_={speedRand[1].as<double>(),speedRand[3].as<double>(),speedRand[5].as<double>()};
 
-            coordRandom_={cfg["coordRandom"][0].as<double>(),cfg["coordRandom"][1].as<double>(),cfg["coordRandom"][2].as<double>()};
+            auto coordRand = cfg["ballSpawnCoordRand"];
+            coordRandom_={coordRand[0].as<double>(),coordRand[1].as<double>(),coordRand[2].as<double>()};
+
+            auto randParallelShift = cfg["randParallelShift"];
+            randParallelShiftMin_={randParallelShift[0].as<double>(),randParallelShift[2].as<double>(),randParallelShift[4].as<double>()};
+            randParallelShiftMax_={randParallelShift[1].as<double>(),randParallelShift[3].as<double>(),randParallelShift[5].as<double>()};
 
             gui::rewardLogger.init({"reward", "forceReward"});
             reward_ = 0;
@@ -200,16 +207,19 @@ namespace raisim {
         void init() final {}
 
         void reset() final {
+            auto randShift = vec3Rand(randParallelShiftMin_, randParallelShiftMax_);
 
             auto ball_coord = ball_gc_init;
             ball_coord += vec3Rand(raisim::Vec<3>{0,0,0},coordRandom_);
-
+            ball_coord += randShift;
             ball_->setPosition(ball_coord);
             ball_->setVelocity(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
 
-            hand_prev_gc_= hand_gc_init_.tail(actionDim_);
-
-            hand_->setState(hand_gc_init_, hand_gv_init_);
+            hand_prev_gc_= hand_gc_init_.tail(handGcDim_);
+            hand_->setGeneralizedCoordinate(hand_gc_init_);
+            auto new_hand_pos = initPosition;
+            new_hand_pos[0]+= randShift[0];new_hand_pos[1]+= randShift[1];new_hand_pos[2]+= randShift[2];
+            hand_->setBasePos_e(new_hand_pos);
             updateObservation();
             if (visualizable_)
                 gui::rewardLogger.clean();
@@ -222,8 +232,7 @@ namespace raisim {
             raisim::Vec<3>  hand_pos{}, finger_pos{}, ball_pos{};
             ball_->getPosition(0, ball_pos);
             hand_->getPosition(hand_joint, hand_pos);
-            hand_pos[0]=0;
-            hand_pos[1]=0;
+//            RSINFO(ball_pos);
 //            RSINFO(hand_pos);
 
 //            hand_->getPosition(hand_joint, finger_pos);
@@ -231,11 +240,13 @@ namespace raisim {
 //
 //            ///pose near mid of palm
 //            hand_pos[2] = hand_pos[2]+(hand_pos[2]-finger_pos[2])/2;
-//            RSINFO(hand_pos);
-//            RSINFO("");
 
             ball_pos-=hand_pos;
-            return ball_pos.squaredNorm();
+            auto dist = ball_pos.squaredNorm();
+//            RSINFO(dist);
+//            RSINFO("");
+
+            return dist;
         }
 
         float step(const Eigen::Ref <EigenVec> &action) final {
@@ -346,7 +357,7 @@ namespace raisim {
 
 //        raisim::ArticulatedSystem *cartpole_;
 //        std::vector <GraphicObject> *cartpoleVisual_;
-
+        Eigen::Vector3d initPosition{0,0,0.3};
         // Ball
         raisim::Sphere *ball_;
         std::vector <GraphicObject> *ballVisual_;
@@ -356,6 +367,7 @@ namespace raisim {
         //Hand
         raisim::ArticulatedSystem *hand_;
         std::vector <GraphicObject> *handVisual_;
+        raisim::Vec<3> randParallelShiftMin_,randParallelShiftMax_;
         Eigen::VectorXd hand_gc_init_, hand_gv_init_, hand_gc_,hand_prev_gc_, hand_gv_;
         int handGvDim_,handGcDim_,nJointsHand_;
 
